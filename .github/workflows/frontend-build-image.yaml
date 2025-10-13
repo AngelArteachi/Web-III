@@ -1,37 +1,49 @@
 name: Build and Push Frontend Image
 
 on:
+  # Disparador para la etiqueta 'latest'
   push:
     branches: [ "main" ]
     paths:
       - 'frontend/**'
   
+  # Disparador para etiquetas de versión como 'v1.0.0'
+  create:
+    tags:
+      - 'v*'
+
   workflow_dispatch:
 
 jobs:
   build-and-push-frontend:
     runs-on: ubuntu-latest
-    
     permissions:
       contents: read
       packages: write
 
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.actor }} 
-          password: ${{ secrets.GITHUB_TOKEN }} 
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
+      # --- SECCIÓN CORREGIDA ---
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}/frontend
+          # Esto le dice CÓMO crear las etiquetas:
+          # 1. Crea 'latest' si el evento es un push a la rama por defecto (main).
+          # 2. Usa el nombre del tag de Git (ej. v1.0.0) si el evento es la creación de un tag.
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=tag
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -40,4 +52,3 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-      
