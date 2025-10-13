@@ -18,7 +18,7 @@ function App() {
         const data = await res.json();
         setHistorial(data.history);
     };
-
+ 
     useEffect(() => {
         (async () => {
             await obtenerHistorial();
