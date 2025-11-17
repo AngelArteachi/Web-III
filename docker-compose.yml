@@ -1,38 +1,98 @@
 services:
   mongo:
-    image: mongo:latest
+    image: mirror.gcr.io/library/mongo:latest
     restart: always
     environment:
-      MONGO_INITDB_ROOT_USERNAME: admin_user 
+      MONGO_INITDB_ROOT_USERNAME: admin_user
       MONGO_INITDB_ROOT_PASSWORD: web3
     ports:
       - "27020:27017"
     networks:
       - mongo-network
+    volumes:
+      - ./mongo-data:/data/db
 
   calculadora:
-    image: calculadora-fast-api
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: ghcr.io/angelarteachi/web-iii/backend:latest
+    volumes: 
+      - ./backend:/app
     ports:
       - "8089:8000"
-    volumes:
-      - ./backend:/app
+    depends_on:
+      - mongo
     networks:
       - mongo-network
 
   frontend:
-    image: frontend-react
-    ports:
-      - "5173:5173"
-    volumes:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: ghcr.io/angelarteachi/web-iii/frontend:latest
+    volumes: 
       - ./frontend:/app
       - /app/node_modules
-    environment:
-      - CHOKIDAR_USEPOLLING=true
+    ports:
+      - "5173:5173"
     depends_on:
       - calculadora
     networks:
       - mongo-network
 
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./monitoring/prometheus.yaml:/etc/prometheus/prometheus.yaml
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yaml"
+    ports:
+      - "9090:9090"
+    networks:
+      - mongo-network
+    depends_on:
+      - calculadora
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3001:3000"
+    networks:
+      - mongo-network
+    depends_on:
+      - prometheus
+      - loki
+    volumes:
+      - ./grafana-data:/var/lib/grafana
+
+  loki:
+    image: mirror.gcr.io/grafana/loki:2.9.3
+    container_name: loki
+    ports:
+      - "3100:3100"
+    networks:
+      - mongo-network
+    command: -config.file=/etc/loki/loki-config.yaml
+    volumes:
+      - ./loki-data:/loki
+      - ./monitoring/loki-config.yaml:/etc/loki/loki-config.yaml
+
+  promtail:
+    image: mirror.gcr.io/grafana/promtail:2.9.3
+    container_name: promtail
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./monitoring/promtail-config.yaml:/etc/promtail/config.yaml
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - mongo-network
+    depends_on:
+      - loki
+
 networks:
   mongo-network:
     driver: bridge
+    name: practicas_mongo-network

@@ -27,3 +27,8 @@ dist-ssr
 
 *.tar
 **/__pycache__/
+**/monitoring/grafana-data
+**/monitoring/loki-data
+mongo-data/
+grafana-data/
+loki-data/

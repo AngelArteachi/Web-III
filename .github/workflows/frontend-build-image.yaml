@@ -1,26 +1,21 @@
-name: Build and Push Frontend Image
+name: Build and Push Frontend Docker Image
 
 on:
-  # Disparador para la etiqueta 'latest'
   push:
-    branches: [ "main" ]
-    paths:
-      - 'frontend/**'
-  
-  # Disparador para etiquetas de versión como 'v1.0.0'
-  create:
+    branches:
+      - main
+      - 'release/*'
     tags:
       - 'v*'
-
-  workflow_dispatch:
+    paths:
+      - 'frontend/**' # <-- IMPORTANTE: Solo se ejecuta si hay cambios aquí
 
 jobs:
-  build-and-push-frontend:
+  build:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -32,23 +27,30 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # --- SECCIÓN CORREGIDA ---
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}/frontend
-          # Esto le dice CÓMO crear las etiquetas:
-          # 1. Crea 'latest' si el evento es un push a la rama por defecto (main).
-          # 2. Usa el nombre del tag de Git (ej. v1.0.0) si el evento es la creación de un tag.
-          tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=ref,event=tag
+      - name: Determine image tag
+        id: vars
+        run: |
+          # Usa GITHUB_REF para detectar si el push fue un tag
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG=${GITHUB_REF#refs/tags/}
+            echo "TAG=$TAG" >> $GITHUB_ENV
+          else
+            echo "TAG=latest" >> $GITHUB_ENV
+          fi
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+      - name: Determine image name (lowercase)
+        run: |
+          # Convierte el nombre del repositorio a minúsculas y añade el sufijo /frontend
+          IMAGE=ghcr.io/$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')/frontend
+          echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+
+      - name: Build Docker image
+        run: |
+          echo "Building image: $IMAGE:$TAG"
+          # Construye la imagen desde el directorio ./frontend
+          docker build -t $IMAGE:$TAG ./frontend
+
+      - name: Push Docker image
+        run: |
+          echo "Pushing image: $IMAGE:$TAG"
+          docker push $IMAGE:$TAG
